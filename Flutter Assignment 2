@@ -1,0 +1,187 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+// -------------------- MODEL --------------------
+class Product {
+  final String id;
+  final String name;
+  final String imageUrl;
+  final double price;
+  final double discount;
+  final double rating;
+  final String deliveryTime;
+
+  Product({
+    required this.id,
+    required this.name,
+    required this.imageUrl,
+    required this.price,
+    required this.discount,
+    required this.rating,
+    required this.deliveryTime,
+  });
+}
+
+// -------------------- SAMPLE DATA --------------------
+final List<Product> dummyProducts = [
+  Product(
+    id: '1',
+    name: 'Fresh Broccoli',
+    imageUrl: 'https://picsum.photos/200',
+    price: 50,
+    discount: 10,
+    rating: 4.5,
+    deliveryTime: "30 mins",
+  ),
+  Product(
+    id: '2',
+    name: 'Organic Apples',
+    imageUrl: 'https://picsum.photos/201',
+    price: 120,
+    discount: 15,
+    rating: 4.8,
+    deliveryTime: "25 mins",
+  ),
+];
+
+// -------------------- ROUTER --------------------
+final GoRouter _router = GoRouter(
+  routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const HomeScreen(),
+    ),
+    GoRoute(
+      path: '/product/:id',
+      builder: (context, state) {
+        final id = state.params['id']!;
+        final product = dummyProducts.firstWhere((p) => p.id == id);
+        return ProductDetailsScreen(product: product);
+      },
+    ),
+  ],
+);
+
+// -------------------- APP --------------------
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: 'Grocery App',
+      theme: ThemeData(primarySwatch: Colors.green),
+      routerConfig: _router,
+    );
+  }
+}
+
+// -------------------- HOME SCREEN --------------------
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Grocery Store")),
+      body: ListView(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(12.0),
+            child: Text("Popular Items", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          ),
+          ...dummyProducts.map((p) => ProductCard(product: p)),
+        ],
+      ),
+      bottomNavigationBar: const BottomNavBar(),
+    );
+  }
+}
+
+// -------------------- PRODUCT DETAILS --------------------
+class ProductDetailsScreen extends StatelessWidget {
+  final Product product;
+  const ProductDetailsScreen({super.key, required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(product.name)),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Image.network(product.imageUrl, height: 200),
+            const SizedBox(height: 20),
+            Text(product.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            Text("₹${product.price}", style: const TextStyle(fontSize: 20, color: Colors.green)),
+            Text("Discount: ${product.discount}%"),
+            RatingStars(rating: product.rating),
+            Text("Delivery in ${product.deliveryTime}"),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// -------------------- WIDGETS --------------------
+class ProductCard extends StatelessWidget {
+  final Product product;
+  const ProductCard({super.key, required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.go('/product/${product.id}'),
+      child: Card(
+        margin: const EdgeInsets.all(12),
+        child: ListTile(
+          leading: Image.network(product.imageUrl, width: 50),
+          title: Text(product.name),
+          subtitle: Text("₹${product.price} | ⭐ ${product.rating}"),
+          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        ),
+      ),
+    );
+  }
+}
+
+class RatingStars extends StatelessWidget {
+  final double rating;
+  const RatingStars({super.key, required this.rating});
+
+  @override
+  Widget build(BuildContext context) {
+    int fullStars = rating.floor();
+    return Row(
+      children: List.generate(5, (i) {
+        return Icon(
+          i < fullStars ? Icons.star : Icons.star_border,
+          color: Colors.amber,
+          size: 20,
+        );
+      }),
+    );
+  }
+}
+
+class BottomNavBar extends StatelessWidget {
+  const BottomNavBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+        BottomNavigationBarItem(icon: Icon(Icons.category), label: "Categories"),
+        BottomNavigationBarItem(icon: Icon(Icons.favorite), label: "Favorites"),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
+      ],
+    );
+  }
+}
