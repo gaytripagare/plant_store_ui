@@ -1,0 +1,575 @@
+import 'package:flutter/material.dart';
+import 'dart:math';
+
+void main() {
+  runApp(const RecipeApp());
+}
+
+// ---------------- Data Model ----------------
+class Recipe {
+  String id;
+  String title;
+  String ingredients;
+  String instructions;
+  String imageUrl;
+
+  Recipe({
+    required this.id,
+    required this.title,
+    required this.ingredients,
+    required this.instructions,
+    required this.imageUrl,
+  });
+}
+
+// ---------------- Mock Firestore (in-memory DB) ----------------
+class MockFirestore {
+  final List<Recipe> _recipes = [];
+
+  List<Recipe> getRecipes() => _recipes;
+
+  void addRecipe(Recipe recipe) {
+    _recipes.add(recipe);
+  }
+
+  void updateRecipe(String id, Recipe updated) {
+    final index = _recipes.indexWhere((r) => r.id == id);
+    if (index != -1) _recipes[index] = updated;
+  }
+
+  void deleteRecipe(String id) {
+    _recipes.removeWhere((r) => r.id == id);
+  }
+}
+
+// ---------------- Main App ----------------
+class RecipeApp extends StatefulWidget {
+  const RecipeApp({super.key});
+
+  @override
+  State<RecipeApp> createState() => _RecipeAppState();
+}
+
+class _RecipeAppState extends State<RecipeApp> {
+  final MockFirestore db = MockFirestore();
+
+  @override
+  void initState() {
+    super.initState();
+
+    // ✅ Add one sample recipe on app start
+    db.addRecipe(
+      Recipe(
+        id: "1",
+        title: "Paneer Butter Masala",
+        ingredients: "Paneer, Butter, Tomato, Onion, Cream, Spices",
+        instructions: "1. Heat butter\n2. Add onion & tomato puree\n3. Add spices\n4. Add paneer & cream\n5. Serve hot with naan",
+        imageUrl: "https://www.vegrecipesofindia.com/wp-content/uploads/2021/04/paneer-butter-masala-1.jpg",
+      ),
+    );
+  }
+
+  void _openAddRecipeForm() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeForm(
+          onSave: (recipe) {
+            setState(() {
+              db.addRecipe(recipe);
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openDetails(Recipe recipe) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeDetails(
+          recipe: recipe,
+          onDelete: () {
+            setState(() {
+              db.deleteRecipe(recipe.id);
+            });
+            Navigator.pop(context);
+          },
+          onUpdate: (updated) {
+            setState(() {
+              db.updateRecipe(recipe.id, updated);
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recipes = db.getRecipes();
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text("🍳 My Recipe Book"),
+        ),
+        body: recipes.isEmpty
+            ? const Center(child: Text("No recipes yet. Add one!"))
+            : ListView.builder(
+                itemCount: recipes.length,
+                itemBuilder: (context, index) {
+                  final recipe = recipes[index];
+                  return ListTile(
+                    title: Text(recipe.title),
+                    onTap: () => _openDetails(recipe),
+                  );
+                },
+              ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _openAddRecipeForm,
+          child: const Icon(Icons.add),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------- Add/Edit Recipe Form ----------------
+class RecipeForm extends StatefulWidget {
+  final Function(Recipe) onSave;
+  final Recipe? existing;
+
+  const RecipeForm({super.key, required this.onSave, this.existing});
+
+  @override
+  State<RecipeForm> createState() => _RecipeFormState();
+}
+
+class _RecipeFormState extends State<RecipeForm> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _title;
+  late TextEditingController _ingredients;
+  late TextEditingController _instructions;
+  late TextEditingController _imageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _title = TextEditingController(text: widget.existing?.title ?? "");
+    _ingredients = TextEditingController(text: widget.existing?.ingredients ?? "");
+    _instructions = TextEditingController(text: widget.existing?.instructions ?? "");
+    _imageUrl = TextEditingController(text: widget.existing?.imageUrl ?? "");
+  }
+
+  void _save() {
+    if (_formKey.currentState!.validate()) {
+      final recipe = Recipe(
+        id: widget.existing?.id ?? Random().nextInt(100000).toString(),
+        title: _title.text,
+        ingredients: _ingredients.text,
+        instructions: _instructions.text,
+        imageUrl: _imageUrl.text,
+      );
+      widget.onSave(recipe);
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.existing == null ? "Add Recipe" : "Edit Recipe"),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: [
+              TextFormField(
+                controller: _title,
+                decoration: const InputDecoration(labelText: "Title"),
+                validator: (v) => v!.isEmpty ? "Enter title" : null,
+              ),
+              TextFormField(
+                controller: _ingredients,
+                decoration: const InputDecoration(labelText: "Ingredients"),
+                validator: (v) => v!.isEmpty ? "Enter ingredients" : null,
+              ),
+              TextFormField(
+                controller: _instructions,
+                decoration: const InputDecoration(labelText: "Instructions"),
+                validator: (v) => v!.isEmpty ? "Enter instructions" : null,
+              ),
+              TextFormField(
+                controller: _imageUrl,
+                decoration: const InputDecoration(labelText: "Image URL"),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _save,
+                child: const Text("Save"),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------- Recipe Details ----------------
+class RecipeDetails extends StatelessWidget {
+  final Recipe recipe;
+  final VoidCallback onDelete;
+  final Function(Recipe) onUpdate;
+
+  const RecipeDetails({
+    super.key,
+    required this.recipe,
+    required this.onDelete,
+    required this.onUpdate,
+  });
+
+  void _edit(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeForm(
+          existing: recipe,
+          onSave: (updated) {
+            onUpdate(updated);
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(recipe.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: () {
+              onDelete();
+              Navigator.pop(context);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: () => _edit(context),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: ListView(
+          children: [
+            if (recipe.imageUrl.isNotEmpty)
+              Image.network(recipe.imageUrl, height: 200, fit: BoxFit.cover),
+            const SizedBox(height: 10),
+            Text("Ingredients:\n${recipe.ingredients}",
+                style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 10),
+            Text("Instructions:\n${recipe.instructions}",
+                style: const TextStyle(fontSize: 16)),
+          ],
+        ),
+      ),
+    );
+  }
+}import 'package:flutter/material.dart';
+import 'dart:math';
+
+void main() {
+  runApp(const RecipeApp());
+}
+
+// ---------------- Data Model ----------------
+class Recipe {
+  String id;
+  String title;
+  String ingredients;
+  String instructions;
+  String imageUrl;
+
+  Recipe({
+    required this.id,
+    required this.title,
+    required this.ingredients,
+    required this.instructions,
+    required this.imageUrl,
+  });
+}
+
+// ---------------- Mock Firestore (in-memory DB) ----------------
+class MockFirestore {
+  final List<Recipe> _recipes = [];
+
+  List<Recipe> getRecipes() => _recipes;
+
+  void addRecipe(Recipe recipe) {
+    _recipes.add(recipe);
+  }
+
+  void updateRecipe(String id, Recipe updated) {
+    final index = _recipes.indexWhere((r) => r.id == id);
+    if (index != -1) _recipes[index] = updated;
+  }
+
+  void deleteRecipe(String id) {
+    _recipes.removeWhere((r) => r.id == id);
+  }
+}
+
+// ---------------- Main App ----------------
+class RecipeApp extends StatefulWidget {
+  const RecipeApp({super.key});
+
+  @override
+  State<RecipeApp> createState() => _RecipeAppState();
+}
+
+class _RecipeAppState extends State<RecipeApp> {
+  final MockFirestore db = MockFirestore();
+
+  @override
+  void initState() {
+    super.initState();
+
+    // ✅ Add one sample recipe on app start
+    db.addRecipe(
+      Recipe(
+        id: "1",
+        title: "Paneer Butter Masala",
+        ingredients: "Paneer, Butter, Tomato, Onion, Cream, Spices",
+        instructions: "1. Heat butter\n2. Add onion & tomato puree\n3. Add spices\n4. Add paneer & cream\n5. Serve hot with naan",
+        imageUrl: "https://www.vegrecipesofindia.com/wp-content/uploads/2021/04/paneer-butter-masala-1.jpg",
+      ),
+    );
+  }
+
+  void _openAddRecipeForm() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeForm(
+          onSave: (recipe) {
+            setState(() {
+              db.addRecipe(recipe);
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openDetails(Recipe recipe) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeDetails(
+          recipe: recipe,
+          onDelete: () {
+            setState(() {
+              db.deleteRecipe(recipe.id);
+            });
+            Navigator.pop(context);
+          },
+          onUpdate: (updated) {
+            setState(() {
+              db.updateRecipe(recipe.id, updated);
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recipes = db.getRecipes();
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text("🍳 My Recipe Book"),
+        ),
+        body: recipes.isEmpty
+            ? const Center(child: Text("No recipes yet. Add one!"))
+            : ListView.builder(
+                itemCount: recipes.length,
+                itemBuilder: (context, index) {
+                  final recipe = recipes[index];
+                  return ListTile(
+                    title: Text(recipe.title),
+                    onTap: () => _openDetails(recipe),
+                  );
+                },
+              ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _openAddRecipeForm,
+          child: const Icon(Icons.add),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------- Add/Edit Recipe Form ----------------
+class RecipeForm extends StatefulWidget {
+  final Function(Recipe) onSave;
+  final Recipe? existing;
+
+  const RecipeForm({super.key, required this.onSave, this.existing});
+
+  @override
+  State<RecipeForm> createState() => _RecipeFormState();
+}
+
+class _RecipeFormState extends State<RecipeForm> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _title;
+  late TextEditingController _ingredients;
+  late TextEditingController _instructions;
+  late TextEditingController _imageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _title = TextEditingController(text: widget.existing?.title ?? "");
+    _ingredients = TextEditingController(text: widget.existing?.ingredients ?? "");
+    _instructions = TextEditingController(text: widget.existing?.instructions ?? "");
+    _imageUrl = TextEditingController(text: widget.existing?.imageUrl ?? "");
+  }
+
+  void _save() {
+    if (_formKey.currentState!.validate()) {
+      final recipe = Recipe(
+        id: widget.existing?.id ?? Random().nextInt(100000).toString(),
+        title: _title.text,
+        ingredients: _ingredients.text,
+        instructions: _instructions.text,
+        imageUrl: _imageUrl.text,
+      );
+      widget.onSave(recipe);
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.existing == null ? "Add Recipe" : "Edit Recipe"),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: [
+              TextFormField(
+                controller: _title,
+                decoration: const InputDecoration(labelText: "Title"),
+                validator: (v) => v!.isEmpty ? "Enter title" : null,
+              ),
+              TextFormField(
+                controller: _ingredients,
+                decoration: const InputDecoration(labelText: "Ingredients"),
+                validator: (v) => v!.isEmpty ? "Enter ingredients" : null,
+              ),
+              TextFormField(
+                controller: _instructions,
+                decoration: const InputDecoration(labelText: "Instructions"),
+                validator: (v) => v!.isEmpty ? "Enter instructions" : null,
+              ),
+              TextFormField(
+                controller: _imageUrl,
+                decoration: const InputDecoration(labelText: "Image URL"),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _save,
+                child: const Text("Save"),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------- Recipe Details ----------------
+class RecipeDetails extends StatelessWidget {
+  final Recipe recipe;
+  final VoidCallback onDelete;
+  final Function(Recipe) onUpdate;
+
+  const RecipeDetails({
+    super.key,
+    required this.recipe,
+    required this.onDelete,
+    required this.onUpdate,
+  });
+
+  void _edit(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeForm(
+          existing: recipe,
+          onSave: (updated) {
+            onUpdate(updated);
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(recipe.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: () {
+              onDelete();
+              Navigator.pop(context);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: () => _edit(context),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: ListView(
+          children: [
+            if (recipe.imageUrl.isNotEmpty)
+              Image.network(recipe.imageUrl, height: 200, fit: BoxFit.cover),
+            const SizedBox(height: 10),
+            Text("Ingredients:\n${recipe.ingredients}",
+                style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 10),
+            Text("Instructions:\n${recipe.instructions}",
+                style: const TextStyle(fontSize: 16)),
+          ],
+        ),
+      ),
+    );
+  }
+}
